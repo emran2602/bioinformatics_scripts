@@ -1,0 +1,76 @@
+#!/bin/bash
+#SBATCH --account p31737
+#SBATCH --partition normal
+#SBATCH --nodes=1
+#SABTCH --ntasks-per-node=13
+#SBATCH -t 8:00:00
+#SBATCH --mem=10gb
+#SBATCH --mail-user=emranmajidy2025@u.northwestern.edu
+#SBATCH --mail-type=All
+#SBATCH --output=/projects/p31737/paired_read/super_output.out
+#SBATCH --error=/projects/p31737/paired_read/super_output.er
+#SBATCH --job-name="super_script"
+#
+module purge all
+module load anaconda3
+module load fastqc
+module load spades
+module load prodigal
+module load hmmer
+
+# activate env with fastp loaded
+source activate /projects/p31750/conda_envs/fastp
+
+# move directory to where inputs are
+cd /projects/p31737/paired_read/input
+fastp -i NTM00014_S55_R1_001.fastq.gz -I NTM00014_S55_R2_001.fastq.gz -o second_out.R1.fq.gz -O second_out.R2.fq.gz --detect_adapter_for_pe --thread 16 --length_required 50
+
+source deactivate
+
+# move output into new directory
+mv *.fq.gz ../results
+
+
+# move to results directory to access fastp outputs
+cd ../results
+
+
+# apply fastqc on the output from fastp which all end in fq.gz
+
+fastqc -t 10 *fq.gz
+# make directory and store fastqc results
+mkdir fastqc
+mv *fastqc.html fastqc
+mv *fastqc.zip fastqc
+
+
+# make directory and then apply spades on all fastp outputs and put into that directory
+mkdir spades_output
+spades.py -1 second_out.R1.fq.gz -2 second_out.R2.fq.gz -o spades_output -t 40 -m 100 --meta
+
+source activate /projects/p31750/conda_envs/quast
+
+# make quast output directory and then cd to spades_output to use that as input for quast and output into quast direc
+mkdir quast_output
+cd spades_output
+
+quast.py --threads 12 scaffolds.fasta -o ../quast_output
+
+source deactivate
+
+cd ../
+
+source activate /projects/p31750/conda_envs/vibrant
+mkdir vibes_output
+# get the input file
+cd spades_output
+#
+# # dont run python3 when envrionment is already activated
+# # If error runs saying VIBRANT error: could not identify KEGG HMM files in database directory. Please run VIBRANT_setup.py
+# # Add the -d argument specifying where the database is
+VIBRANT_run.py -i scaffolds.fasta -folder ../vibes_output -d /projects/p31750/conda_envs/path/to/store/databases/databases
+#
+source deactivate
+
+
+
